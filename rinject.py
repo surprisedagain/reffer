@@ -8,7 +8,7 @@ from bibtex_entry import BibTeXEntry, FormatError
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-m', '--multiple', action='store_true', help="trial")
+    group.add_argument('-m', '--multiple', action='store_true', help="read a sequence of BibTeX entries from target and inject them into the files specified in their file tags.")
     group.add_argument('bibtexfile', nargs='?', help="file containing BibTeX entry to be injected")
     parser.add_argument('target', help="file to be injected with BibTeX extry")
     args = parser.parse_args()
