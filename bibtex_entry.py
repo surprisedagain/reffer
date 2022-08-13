@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # written by Nathan Sinclair
-import re, xattr
+import re
+
+import xattr
 
 class FormatError(Exception): pass
 
@@ -11,9 +13,9 @@ class BibTeXEntry:
     # type string stored in group('type')
     TYPE_RE = re.compile(r'@(?P<type>\w+)\s*\{')
     # citekey string stored in group('citekey')
-    CITEKEY_RE = re.compile(r'\s*(?P<citekey>\w*)\s*,')
+    CITEKEY_RE = re.compile(r'\s*(?P<citekey>[-_:\w]*)\s*,')
     # name stored in group('name') content in group('braced_text') or group('number')
-    TAG_RE =  re.compile(r'\s*(?P<name>[\w-]+)\s*=\s*([\{\"](?P<braced_text>.*?)[\}\"]|(?P<number>\d+))\s*(?:,\s*\}|,|\})')
+    TAG_RE =  re.compile(r'\s*(?P<name>[\w-]+)\s*=\s*([\{\"](?P<braced_text>.*?)[\}\"]|(?P<number>\d+))\s*(?:,\s*\}|,|\s+\})')
 
     def __init__(self, bibdict:dict):
         self.type = bibdict.pop('type')
@@ -43,8 +45,8 @@ class BibTeXEntry:
         last_letter = "" # just in case the very first tag is malformed
         while tag_match := cls.TAG_RE.match(bibstr, pos):
             entry_dict[tag_match.group('name')] =tag_match.group('braced_text')\
-                                           if tag_match.group('number') is None\
-                                           else tag_match.group('number') 
+                                              if tag_match.group('braced_text')\
+                                              else tag_match.group('number') 
 
             pos = tag_match.end()
             last_letter = tag_match.group(0)[-1]
@@ -56,7 +58,7 @@ class BibTeXEntry:
 
     @classmethod # Alternative constructor
     def from_xattr(cls, file):
-        return cls.from_str(xattr.getxattr(file, cls.XATTR_KEY).decode('utf-8'))
+        return cls.from_str(xattr.getxattr(file, cls.XATTR_KEY).decode())
 
     @classmethod
     def read_entries(cls, bibstr:str):
@@ -74,12 +76,22 @@ class BibTeXEntry:
     def inject(self, file) -> None:
         xattr.setxattr(file, self.XATTR_KEY, self.__repr__().encode('utf-8'))
 
+    def autoset_citekey(self):
+        if 'author' in self.tags:
+            name = re.match(r'\s*(?P<name>\w+)', self.tags['author']).group(
+                                                                         'name')
+        else:
+            name = ''
+        year = self.tags.get('year', '') # string expected
+        self.citekey = name + year
+
     def __str__(self):
         tags = list(self.tags)
         tags.sort()
         result = f'@{self.type}{{{self.citekey},\n\t'\
              + ',\n\t'.join(f'{name} = {{{self.tags[name]}}}' for name in tags)\
-             + '\n}'
+             + ' \n}' # that space is important to resolve an ambiguity in
+                      # in regular expressions that quasi parse BibTeX entries
         return result
         
     def __repr__(self):
