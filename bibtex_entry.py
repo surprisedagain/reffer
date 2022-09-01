@@ -2,7 +2,9 @@
 # written by Nathan Sinclair
 import re
 
-import xattr
+from xattr import xattr
+from pathlib import Path
+import errno
 
 class FormatError(Exception): pass
 
@@ -18,14 +20,14 @@ class BibTeXEntry:
     TAG_RE =  re.compile(r'\s*(?P<name>[\w-]+)\s*=\s*([\{\"](?P<braced_text>.*?)[\}\"]|(?P<number>\d+))\s*(?:,\s*\}|,|\s+\})')
 
     def __init__(self, bibdict:dict):
-        self.type = bibdict.pop('type')
-        self.citekey = bibdict.pop('citekey', '')
-        self.tags = bibdict
+        # ???? if citekey or type not in bibdict raise Exception 
+        for tag, value in bibdict.items():
+            setattr(self, tag, value)
 
     @classmethod # Alternative constructor
     def from_str(cls, bibstr:str, pos=0, *, return_end=False):
         """ Quasi-parse the next bibtex entry in bibstr starting at/after pos
-            :param bibstr: a string thought to contain a bibtex entry
+            :param bibstr: a string expected to contain a bibtex entry
             :param pos: the position in bibstr to start searching for the entry
             :returns: a BibTexEntry OR a tuple (BibTeXEntry, endpos)
             :raises FormatError: arg[0] == position of last consumed character
@@ -44,7 +46,7 @@ class BibTeXEntry:
 
         last_letter = "" # just in case the very first tag is malformed
         while tag_match := cls.TAG_RE.match(bibstr, pos):
-            entry_dict[tag_match.group('name')] =tag_match.group('braced_text')\
+            entry_dict[tag_match.group('name')]= tag_match.group('braced_text')\
                                               if tag_match.group('braced_text')\
                                               else tag_match.group('number') 
 
@@ -57,8 +59,15 @@ class BibTeXEntry:
         return cls(entry_dict) if not return_end else (cls(entry_dict), pos)
 
     @classmethod # Alternative constructor
-    def from_xattr(cls, file):
-        return cls.from_str(xattr.getxattr(file, cls.XATTR_KEY).decode())
+    def from_xattr(cls, filepath):
+        filepath = Path(filepath)
+        if not filepath.exists():
+            raise FileNotFoundError(errno.ENOENT, "File not Found"
+                                                                , str(filepath))
+        if (x_ := xattr(filepath)).has_key(cls.XATTR_KEY):
+            return cls.from_str(x_.get(cls.XATTR_KEY).decode())
+        else:
+            return None
 
     @classmethod
     def read_entries(cls, bibstr:str):
@@ -73,23 +82,27 @@ class BibTeXEntry:
             yield entry
             entry, pos = cls.from_str(bibstr, pos, return_end=True)
 
-    def inject(self, file) -> None:
-        xattr.setxattr(file, self.XATTR_KEY, self.__repr__().encode('utf-8'))
+    def inject(self, filepath) -> None:
+        filepath = Path(filepath)
+        if not filepath.exists():
+            raise FileNotFoundError(errno.ENOENT, "File not Found"
+                                                                , str(filepath))
+        xattr(filepath).set(self.XATTR_KEY, repr(self).encode())
 
-    def autoset_citekey(self):
-        if 'author' in self.tags:
-            name = re.match(r'\s*(?P<name>\w+)', self.tags['author']).group(
-                                                                         'name')
+    def autoset_citekey(self) -> None:
+        if 'author' in vars(self):
+            name = re.match(r'\s*(?P<name>\w+)'
+                                            , self.author).group('name').lower()
         else:
             name = ''
-        year = self.tags.get('year', '') # string expected
+        year = vars(self).get('year', '') # string expected
         self.citekey = name + year
 
     def __str__(self):
-        tags = list(self.tags)
+        tags = [tag for tag in vars(self).keys() - {'citekey', 'type'}]
         tags.sort()
         result = f'@{self.type}{{{self.citekey},\n\t'\
-             + ',\n\t'.join(f'{name} = {{{self.tags[name]}}}' for name in tags)\
+             + ',\n\t'.join(f'{name} = {{{vars(self).get(name)}}}' for name in tags)\
              + ' \n}' # that space is important to resolve an ambiguity in
                       # in regular expressions that quasi parse BibTeX entries
         return result

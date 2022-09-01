@@ -2,6 +2,7 @@
 # written by nathan sinclair
 import os, tempfile
 from argparse import ArgumentParser
+from pathlib import Path
 from subprocess import run
 from sys import stderr
 from time import sleep
@@ -17,19 +18,21 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     try:
-        if args.multiple:
+        if args.multiple: # read multiple bibtex entries from args.target
             with open(args.target, 'r') as bibfile:
                 for entry in BibTeXEntry.read_entries(bibfile.read()):
                     try:
-                        entry.inject(filename := entry.tags.pop('file'))
-                        print(f'BibTeX Entry set for "{filename}"')
-                    except (FileNotFoundError, PermissionError) as e:
-                        print('WARNING: Could not access file '
-                               f'"{e.filename.decode()}": {e.strerror}\n'
-                               'Entry skipped.', file=stderr)
+                        filepath = Path(entry.file).resolve()
+                        del entry.file
+                        entry.inject(filepath)
+                        print(f'BibTeX Entry set for "{entry.file}"')
+
+                    except (FileNotFoundError, PermissionError, IOError) as e:
+                        print(f"WARNING: {e.strerror}: '{e.filename.decode()}'\n"
+                                                  "Entry skipped.", file=stderr)
                     except KeyError as e:
-                        print(f'WARNING: Entry for "{entry.tags["title"]}" does'
-                          'not have a "file" tag.\nEntry skipped.', file=stderr)
+                        print(f"WARNING: Entry for '{entry.title}' does not "
+                              "have a 'file' tag.\nEntry skipped.", file=stderr)
         else:
             if args.bibtexfile: # entry in bibtexfile
                 with open(args.bibtexfile, 'r') as bibfile:
@@ -61,9 +64,8 @@ if __name__ == '__main__':
             entry.inject(args.target)
             print(f'Entry set for "{args.target}"')
 
-    except (FileNotFoundError, PermissionError) as e:
-        # this clumsyness forced by xattr using b'filename' when raising errors
+    except OSError as e:
         if isinstance(e.filename, bytes):
             e.filename = e.filename.decode()
-        print(f'WARNING: Could not access file "{e.filename}": {e.strerror}'
-                                                                  , file=stderr)
+        print(f"ERROR: {e.strerror}: '{e.filename}'", file=stderr)
+        sys.exit(e.errno)

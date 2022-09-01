@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # written by nathan sinclair
 
+import sys
 from argparse import ArgumentParser
 from itertools import chain
 from pathlib import Path
-from sys import stderr
 
 from bibtex_entry import BibTeXEntry, FormatError
 
@@ -21,8 +21,8 @@ if __name__ == '__main__':
                                          , help="show the citekey of each file")
     parser.add_argument('-t', '--tag', action='append'
                 , metavar=('TAG'), help="show the content of TAG for each file")
-    parser.add_argument('target', nargs='+', default=['.']
-                                  , help="files with BibTeX extry to be edited")
+    parser.add_argument('target', nargs='*', default=['.']
+                                 , help="files with BibTeX entry to be printed")
     args = parser.parse_args()
 
     GLOB_PAT = '**/*.pdf' if args.recursive else '*.pdf'
@@ -30,25 +30,28 @@ if __name__ == '__main__':
                                  if (tp := Path(targetname)).is_dir() else (tp,)
                                  for targetname in args.target):
         try:
-            print(f'{filepath.name}:', file=stderr)
             entry = BibTeXEntry.from_xattr(filepath)
 
+            print(f"{filepath.name}:", file=sys.stderr)
+            if entry is None:
+                print('\tNo BibTeX entry attached to file', file=sys.stderr)
+                continue
+
             if args.type:
-                print(f"\t@{entry.type}")
+                print(f"\ttype: {entry.type}")
             if args.citekey:
-                print(f"\tCiteKey: {entry.citekey}")
+                print(f"\tciteKey: {entry.citekey}")
             if args.tag:
                 for tag in args.tag:
-                    if tag in entry.tags:
-                        print(f'\t{tag} = {{{entry.tags[tag]}}}')
+                    if tag in vars(entry):
+                        print(f'\t{tag} = {{{getattr(entry, tag)}}}')
                     else:
                         print(F"\t{tag}: NO SUCH TAG")
 
             if not (args.type or args.citekey or args.tag):
                 print(entry)
             print(flush=True) # if &> file - this interleaves stdout and stderr
+
         except OSError as e:
-            if e.errno == 93:
-                print('No BibTeX entry attached to file')
-            else:
-                print(e.strerror)
+            print(f"{e.filename}: {e.strerror}", file=sys.stderr)
+            sys.exit(e.errno)
