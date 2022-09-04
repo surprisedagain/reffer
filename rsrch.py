@@ -7,7 +7,7 @@ from pathlib import Path
 
 import subprocess
 import re
-import sys
+import sys, os, errno
 
 from bibtex_entry import BibTeXEntry, FormatError
 
@@ -36,27 +36,48 @@ if __name__ == '__main__':
                                if (tp_ := Path(targetname)).is_dir() else (tp_,)
                                for targetname in args.target):
         try:
-            bib = BibTeXEntry.from_xattr(filepath)
-            if bib is None:
-                print(f"{filepath}:\n\tNo Bibtex entry attached to file"
-                                                                  , file=sys.stderr)
-
+            if not filepath.exists():
+                raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT)
+                                                                     , filepath)
             result = ""
-            if args.citekey and args.citekey in bib.citekey:
-                result += f"\tcitekey: {bib.citekey}\n"
+            if args.keyword or args.tag or args.citekey:
+                # need to search some component of bibliography
+                bib = BibTeXEntry.from_xattr(filepath)
+                if bib:
+                    
+                    if args.citekey: # search citekey
+                        if args.citekey.casefold() in bib.citekey.casefold():
+                            result += f"\tcitekey: {bib.citekey}\n"
+                        elif args.all:
+                            continue # on to next file
 
-            if args.keyword and any(search_term in getattr(bib, 'keywords', '')
-                                               for search_term in args.keyword):
-                result += f"\tkeywords = {{{bib.keywords}}}\n"
+                    
+                    if args.keyword: # search keywords
+                        if any(search_term.casefold()
+                                      in getattr(bib, 'keywords', '').casefold()
+                                      for search_term in args.keyword):
+                            result += f"\tkeywords = {{{bib.keywords}}}\n"
+                        elif args.all:
+                            continue # on to next file
 
-            if args.tag:
-                tmp_result = set()
-                for search_tag, search_term in args.tag:
-                    if search_term in getattr(bib, search_tag, ''):
-                        tmp_result.add(
-                            "\t{search_tag} = {{{getattr(bib, search_tag)}}}\n")
-                result += "".join(tmp_result)
+                    if args.tag: # search tags
+                        tmp_result = set()
+                        all_criteria = True
+                        for search_tag, search_term in args.tag:
+                            if search_term.casefold() in getattr(bib, search_tag,'').casefold():
+                                tmp_result.add(f"\t{search_tag} = "
+                                            f"{{{getattr(bib, search_tag)}}}\n")
+                            elif args.all:
+                                all_criteria = False
+                                break
+                        if args.all and not all_criteria:
+                            continue
+                        result += "".join(tmp_result)
+                else: # no bibliography attached to file
+                    print(f"{filepath}:\n\tNo Bibtex entry attached to file"
+                                                              , file=sys.stderr)
 
+            # bibliography search finished - may search notes next
             if args.note:
                 notes = subprocess.run(
                          ['skimnotes', 'get', '-format', 'text', filepath , '-']
@@ -67,11 +88,15 @@ if __name__ == '__main__':
                                                       , flags=re.MULTILINE)[1:])
                 tmp_result = set()
                 for heading, note in zip(note_iter, note_iter):
-                    if any((st_:= search_term) in heading or search_term in note
+                    if any((st_:= search_term.casefold()) in heading.casefold()
+                                                  or st_ in note.casefold()
                                                   for search_term in args.note):
                         tmp_result.add(f"\t{heading}: found \"{st_}\"\n"
                                                         f"\t{note.strip()}\n\n")
-                result += "".join(tmp_result)
+                if tmp_result:
+                    result += "".join(tmp_result)
+                elif args.all:
+                    continue # on to next file
 
             if result:
                 print(f"{filepath}:\n{result}")
