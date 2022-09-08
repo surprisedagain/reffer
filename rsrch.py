@@ -64,7 +64,8 @@ if __name__ == '__main__':
                         tmp_result = set()
                         all_criteria = True
                         for search_tag, search_term in args.tag:
-                            if search_term.casefold() in getattr(bib, search_tag,'').casefold():
+                            if search_term.casefold() \
+                                      in getattr(bib, search_tag,'').casefold():
                                 tmp_result.add(f"\t{search_tag} = "
                                             f"{{{getattr(bib, search_tag)}}}\n")
                             elif args.all:
@@ -73,6 +74,7 @@ if __name__ == '__main__':
                         if args.all and not all_criteria:
                             continue
                         result += "".join(tmp_result)
+
                 else: # no bibliography attached to file
                     print(f"{filepath}:\n\tNo Bibtex entry attached to file"
                                                               , file=sys.stderr)
