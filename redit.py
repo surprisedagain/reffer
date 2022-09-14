@@ -1,88 +1,106 @@
 #!/usr/bin/env python3
 # written by nathan sinclair
-import os, sys, re, readline, tempfile
+
+import os, sys, readline
+import subprocess, tempfile
+
 from argparse import ArgumentParser
-from subprocess import run
+from itertools import chain
+from pathlib import Path
 from time import sleep
 
 from bibtex_entry import BibTeXEntry, FormatError
 
-#def set_citekey(file):
-
-
 if __name__ == '__main__':
     parser = ArgumentParser()
+    parser.add_argument('-r', '--recursive', action='store_true'
+                                         , help="recurse on each sub-directory")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-ck', '--citekey'
+    group.add_argument('-c', '--citekey'
                                , help="set the citekey of the entry to CITEKEY")
-    group.add_argument('-ak', '--autocitekey',  action='store_true'
+    group.add_argument('-ac', '--autocitekey',  action='store_true'
                                       , help="autoset the citekey of the entry")
+
     parser.add_argument('-t', '--tag', nargs=2, action='append'
               , metavar=('TAG','VALUE'), help="set the content of TAG to VALUE")
-    parser.add_argument('-te', '--tagedit', action='append'
-         , metavar=('TAGNAME'), help='interactively edit the content of TAGNAME')
-    parser.add_argument('target', help="file with BibTeX extry to be edited")
+    parser.add_argument('-te', '--tagedit', action='append', metavar=('TAGNAME')
+                             , help='interactively edit the content of TAGNAME')
+    parser.add_argument('-ta', '--tagappend', nargs=2, action='append'
+                                   , metavar=('TAG', "ADDENDUM")
+                                   , help="append ADDENDUM to the value of TAG")
+
+    parser.add_argument('target', nargs='+'
+                                , help="file(s) with BibTeX entry to be edited")
     args = parser.parse_args()
 
-    # get the entry to be edited
-    try:
-        entry = BibTeXEntry.from_xattr(args.target)
-        if entry is None:
-            print(f'{args.target}:\n\tNo BibTeX entry attached to file'
+    GLOB_PAT = '**/*.pdf' if args.recursive else '*.pdf'
+    for filepath in chain.from_iterable(tp.glob(GLOB_PAT)
+                                 if (tp := Path(targetname)).is_dir() else (tp,)
+                                 for targetname in args.target):
+        try:
+            bib = BibTeXEntry.from_xattr(filepath)
+            if bib is None:
+                print(f'{filepath}:\n\tNo BibTeX entry attached to file'
                                                               , file=sys.stderr)
-            sys.exit(1)
+                continue
 
-        # various ways to modify entry based on command option
-        if args.citekey:
-            entry.citekey = args.citekey
+            print(f"{filepath.name}:", file=sys.stderr)
+            # various ways to modify bib based on command option
+            if args.citekey:
+                bib.citekey = args.citekey
 
-        elif args.autocitekey:
-            entry.autoset_citekey()
+            elif args.autocitekey:
+                bib.autoset_citekey()
 
-        if args.tag:
-            for key, value in args.tag:
-                setattr(entry, key, value)
+            if args.tag:
+                for key, value in args.tag:
+                    setattr(bib, key, value)
 
-        if args.tagedit:
-            try:
-                for key in args.tagedit:
-                    default = getattr(entry, key, '')
-                    readline.set_startup_hook(lambda: readline.insert_text(default))
-                    new_value = input(f"Set '{key}' to: ")
-                    if new_value:
-                        setattr(entry, key, new_value)
-                    else:
-                        delattr(entry, key)
-            finally:
-                readline.set_startup_hook()
+            if args.tagappend:
+                for key, suffix in args.tag:
+                    old_value = getattr(bib, key, '')
+                    setattr(bib, key, old_value+suffix)
 
-        if not (args.citekey or args.autocitekey or args.tag or args.tagedit):
-            EDITOR = os.environ.get('EDITOR', 'nano')
-            tf = tempfile.NamedTemporaryFile(suffix='.tmp', delete=False)
-            tf.write(str(entry).encode())
-            tf.close()
-            try:
-                while True: # repeat until no errors raised
-                    try:
-                        run([EDITOR, tf.name])
-                        tf = open(tf.name, 'r')
-                        entry = BibTeXEntry.from_str(tf.read())
-                    except FormatError as e:
-                        print('WARNING: Could not recognise entry format: Last '
-                                     f' read char {e.args[0]}', file=sys.stderr)
-                        sleep(4)
-                        continue
-                    else:
-                        break
-                    finally:
-                        tf.close()
-            finally:
-                os.remove(tf.name)
+            if args.tagedit:
+                try:
+                    for key in args.tagedit:
+                        default = getattr(bib, key, '')
+                        readline.set_startup_hook(lambda: readline.insert_text(default))
+                        new_value = input(f"\tSet '{key}' to: ")
+                        if new_value:
+                            setattr(bib, key, new_value)
+                        elif hasattr(bib, key):
+                            delattr(bib, key)
+                finally:
+                    readline.set_startup_hook()
 
-        entry.inject(args.target)
-        print(f'BibTeX entry for "{args.target}" updated')
+            if not (args.citekey or args.autocitekey or args.tag or args.tagedit
+                                                             or args.tagappend):
+                EDITOR = os.environ.get('EDITOR', 'nano')
+                tf = tempfile.NamedTemporaryFile(suffix='.tmp', delete=False)
+                tf.write(str(bib).encode())
+                tf.close()
+                try:
+                    while True: # repeat until no errors raised
+                        try:
+                            run([EDITOR, tf.name])
+                            tf = open(tf.name, 'r')
+                            bib = BibTeXEntry.from_str(tf.read())
+                        except FormatError as e:
+                            print('WARNING: Could not recognise entry format: '
+                                 f'Last read char {e.args[0]}', file=sys.stderr)
+                            sleep(4)
+                            continue
+                        else:
+                            break
+                        finally:
+                            tf.close()
+                finally:
+                    os.remove(tf.name)
 
-    except FileNotFoundError as e:
-        print(f"ERROR: {e.strerror}: {e.filename}", file=sys.stderr)
-        sys.exit(e.errno)
+            bib.inject(filepath)
+            print(f'\tBibTeX entry for "{filepath}" updated')
 
+        except FileNotFoundError as e:
+            print(f"ERROR: {e.strerror}: {e.filename}", file=sys.stderr)
+            sys.exit(e.errno)

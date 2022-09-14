@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # written by nathan sinclair
-import os, tempfile
+
+import os, tempfile, errno
+import sys
 from argparse import ArgumentParser
 from pathlib import Path
 from subprocess import run
-from sys import stderr
 from time import sleep
 
 from bibtex_entry import BibTeXEntry, FormatError
@@ -19,25 +20,26 @@ if __name__ == '__main__':
 
     try:
         if args.multiple: # read multiple bibtex entries from args.target
-            with open(args.target, 'r') as bibfile:
-                for entry in BibTeXEntry.read_entries(bibfile.read()):
-                    try:
-                        filepath = Path(entry.file).resolve()
-                        del entry.file
-                        entry.inject(filepath)
-                        print(f'BibTeX Entry set for "{entry.file}"')
+            for bib in BibTeXEntry.read_entries(open(args.target, 'r').read()):
+                try:
+                    filepath = Path(bib.file).resolve()
+                    del bib.file
+                    bib.inject(filepath)
+                    print(f'BibTeX Entry set for "{bib.file}"')
 
-                    except (FileNotFoundError, PermissionError, IOError) as e:
-                        print(f"WARNING: {e.strerror}: '{e.filename.decode()}'\n"
-                                                  "Entry skipped.", file=stderr)
-                    except KeyError as e:
-                        print(f"WARNING: Entry for '{entry.title}' does not "
-                              "have a 'file' tag.\nEntry skipped.", file=stderr)
+                except (FileNotFoundError, PermissionError, IOError) as e:
+                    print(f"WARNING: {e.strerror}: '{e.filename.decode()}'\n"
+                                              "Entry skipped.", file=sys.stderr)
+                except KeyError as e:
+                    print(f"WARNING: Entry for '{bib.title}' does not "
+                          "have a 'file' tag.\nEntry skipped.", file=sys.stderr)
         else:
             if args.bibtexfile: # entry in bibtexfile
-                with open(args.bibtexfile, 'r') as bibfile:
-                    entry = BibTeXEntry.from_str(bibfile.read())
+                bib = BibTeXEntry.from_str(open(args.bibtexfile, 'r').read())
             else: # entry to be hand written by user from template
+                if not (fp_ := Path(args.target).resolve()).exists():
+                    raise FileNotFoundError(errno.ENOENT, "File not found"
+                                                                     , str(fp_))
                 EDITOR = os.environ.get('EDITOR', 'nano')
                 tf = tempfile.NamedTemporaryFile(suffix='.tmp', delete=False)
                 tf.write(BibTeXEntry.ENTRY_TEMPLATE.encode())
@@ -47,11 +49,11 @@ if __name__ == '__main__':
                         try:
                             run([EDITOR, tf.name])
                             tf = open(tf.name, 'r')
-                            entry = BibTeXEntry.from_str(tf.read())
+                            bib = BibTeXEntry.from_str(tf.read())
                         except FormatError as e:
                             print('WARNING: Could not recognise entry format: '
                                f'Last read char {e.args[0]} in file "{tf.name}"'
-                               , file=stderr)
+                               , file=sys.stderr)
                             sleep(4)
                             continue
                         else:
@@ -61,11 +63,11 @@ if __name__ == '__main__':
                 finally:
                     os.remove(tf.name)
 
-            entry.inject(args.target)
+            bib.inject(args.target)
             print(f'Entry set for "{args.target}"')
 
     except OSError as e:
         if isinstance(e.filename, bytes):
             e.filename = e.filename.decode()
-        print(f"ERROR: {e.strerror}: '{e.filename}'", file=stderr)
+        print(f"ERROR: {e.strerror}: '{e.filename}'", file=sys.stderr)
         sys.exit(e.errno)

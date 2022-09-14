@@ -6,7 +6,7 @@ from xattr import xattr
 from pathlib import Path
 import errno
 
-class FormatError(Exception): pass
+class FormatError(ValueError): pass
 
 class BibTeXEntry:
     XATTR_KEY = 'sinclair_reffer_bibtex_entry'
@@ -20,7 +20,8 @@ class BibTeXEntry:
     TAG_RE =  re.compile(r'\s*(?P<name>[\w-]+)\s*=\s*([\{\"](?P<braced_text>.*?)[\}\"]|(?P<number>\d+))\s*(?:,\s*\}|,|\s+\})')
 
     def __init__(self, bibdict:dict):
-        # ???? if citekey or type not in bibdict raise Exception 
+        if not {'citekey', 'type'} <= bibdict.keys():
+            raise FormatError()
         for tag, value in bibdict.items():
             setattr(self, tag, value)
 
@@ -47,8 +48,8 @@ class BibTeXEntry:
         last_letter = "" # just in case the very first tag is malformed
         while tag_match := cls.TAG_RE.match(bibstr, pos):
             entry_dict[tag_match.group('name')]= tag_match.group('braced_text')\
-                                              if tag_match.group('braced_text')\
-                                              else tag_match.group('number') 
+                                  if tag_match.group('braced_text') is not None\
+                                  else tag_match.group('number') 
 
             pos = tag_match.end()
             last_letter = tag_match.group(0)[-1]
@@ -104,7 +105,7 @@ class BibTeXEntry:
         result = f'@{self.type}{{{self.citekey},\n\t'\
              + ',\n\t'.join(f'{name} = {{{vars(self).get(name)}}}' for name in tags)\
              + ' \n}' # that space is important to resolve an ambiguity in
-                      # in regular expressions that quasi parse BibTeX entries
+                      # the regular expressions that quasi-parse BibTeX entries
         return result
         
     def __repr__(self):
