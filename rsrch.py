@@ -74,13 +74,9 @@ if __name__ == '__main__':
                             elif args.all:
                                 all_criteria = False
                                 break
-                        if args.all and not all_criteria:
+                        if not all_criteria: # can only fire if args.all
                             continue # on to next file
                         result += "".join(tmp_result)
-
-                else: # no BibTeXEntry attached to file
-                    print(f"{filepath}:\n\tNo BibTeX entry attached to file"
-                                                              , file=sys.stderr)
 
             # bibliography search finished - may search notes next
             if args.note:
@@ -105,7 +101,8 @@ if __name__ == '__main__':
                     continue # on to next file
 
             if result:
-                print(f"{filepath}:\n{result}")
+                print(filepath, flush=True)
+                print(result, file=sys.stderr)
 
         except OSError as e:
             print(f"ERROR: {e.strerror}: '{e.filename}'", file=sys.stderr)
