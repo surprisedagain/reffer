@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 # written by nathan sinclair
 
-from argparse import ArgumentParser
-from itertools import chain
-from pathlib import Path
-
 import subprocess
 import re
 import sys, os, errno
+import textwrap
+
+from argparse import ArgumentParser
+from itertools import chain
+from pathlib import Path
+from textwrap import TextWrapper
 
 from bibtex_entry import BibTeXEntry, FormatError
 
+TEXT_LAYOUT = TextWrapper(initial_indent='\t', subsequent_indent='\t'
+                                                            , expand_tabs=False)
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('-r', '--recursive', action='store_true'
@@ -42,18 +46,17 @@ if __name__ == '__main__':
             result = ""
             if args.keyword or args.tag or args.citekey:
                 # need to search some component of bibliography
-                bib = BibTeXEntry.from_xattr(filepath)
-                if bib:
-                    
+                if bib := BibTeXEntry.from_xattr(filepath):
+
                     if args.citekey: # search citekey
                         if args.citekey.casefold() in bib.citekey.casefold():
                             result += f"\tcitekey: {bib.citekey}\n"
                         elif args.all:
                             continue # on to next file
 
-                    
                     if args.keyword: # search keywords
-                        if any(search_term.casefold()
+                        junct = all if args.all else any
+                        if junct(search_term.casefold()
                                       in getattr(bib, 'keywords', '').casefold()
                                       for search_term in args.keyword):
                             result += f"\tkeywords = {{{bib.keywords}}}\n"
@@ -72,11 +75,11 @@ if __name__ == '__main__':
                                 all_criteria = False
                                 break
                         if args.all and not all_criteria:
-                            continue
+                            continue # on to next file
                         result += "".join(tmp_result)
 
-                else: # no bibliography attached to file
-                    print(f"{filepath}:\n\tNo Bibtex entry attached to file"
+                else: # no BibTeXEntry attached to file
+                    print(f"{filepath}:\n\tNo BibTeX entry attached to file"
                                                               , file=sys.stderr)
 
             # bibliography search finished - may search notes next
@@ -94,7 +97,8 @@ if __name__ == '__main__':
                                                   or st_ in note.casefold()
                                                   for search_term in args.note):
                         tmp_result.add(f"\t{heading}: found \"{st_}\"\n"
-                                                        f"\t{note.strip()}\n\n")
+                                                        + TEXT_LAYOUT.fill(note)
+                                                        + "\n\n")
                 if tmp_result:
                     result += "".join(tmp_result)
                 elif args.all:
