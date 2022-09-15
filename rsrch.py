@@ -99,8 +99,6 @@ if __name__ == '__main__':
                         tmp_result.add(f"\t{heading}: found \"{st_}\"\n"
                                                         + TEXT_LAYOUT.fill(note)
                                                         + "\n\n")
-                        new_result)
-                                       
                 if tmp_result:
                     result += "".join(tmp_result)
                 elif args.all:
