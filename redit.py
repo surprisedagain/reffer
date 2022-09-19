@@ -83,7 +83,7 @@ if __name__ == '__main__':
                 try:
                     while True: # repeat until no errors raised
                         try:
-                            run([EDITOR, tf.name])
+                            subprocess.run([EDITOR, tf.name])
                             tf = open(tf.name, 'r')
                             bib = BibTeXEntry.from_str(tf.read())
                         except FormatError as e:
