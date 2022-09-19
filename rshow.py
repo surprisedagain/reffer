@@ -22,14 +22,19 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--tag', action='append'
                 , metavar=('TAG'), help="show the content of TAG for each file")
     parser.add_argument('-ht', '--hashtags', action='store_true'
-              , help="show the hashtags in the keywords and notes of each file")
+              , help="show the hashtags in the notes and keywords of each file")
+    parser.add_argument('-cht', '--collatehashtags', action='store_true'
+              , help="show a collated list of all hashtags in the notes and "
+              "keywords of all files")
     parser.add_argument('target', nargs='*', default=['.']
-                                 , help="files with BibTeX entry to be printed")
+                                 , help="files (or directories containing them) "
+                                 "with BibTeX entries to be printed")
     args = parser.parse_args()
 
-    if args.hashtags:
+    if args.collatehashtags:
         all_hashtags = set()
-        HASHTAG_RE = re.compile(r'#\w+(?::\d+)?')
+    if args.hashtags or args.collatehashtags:
+        HASHTAG_RE = re.compile(r'#\w+(?:(:\d+)|(\(.*?\)))?')
 
     GLOB_PAT = '**/*.pdf' if args.recursive else '*.pdf'
     for filepath in chain.from_iterable(tp.glob(GLOB_PAT)
@@ -40,7 +45,7 @@ if __name__ == '__main__':
 
             print(f"{filepath.name}:", file=sys.stderr)
 
-            if args.hashtags:
+            if args.hashtags or args.collatehashtags:
                 file_hashtags = set()
                 if hasattr(bib, 'keywords'):
                     file_hashtags.update(match.group()
@@ -52,11 +57,13 @@ if __name__ == '__main__':
                 file_hashtags.update(match.group()
                                         for match in HASHTAG_RE.finditer(notes))
                 if file_hashtags:
-                    print(f"\thashtags: {' '.join(file_hashtags)}")
-                    all_hashtags.update(file_hashtags)
+                    if args.hashtags:
+                        print(f"\thashtags: {' '.join(file_hashtags)}")
+                    if args.collatehashtags:
+                        all_hashtags.update(file_hashtags)
 
             if bib is None:
-                print('\tNo BibTeX entry attached to file', file=sys.stderr)
+                print('\tNo BibTeX entry attached to file\n', file=sys.stderr)
                 continue
 
             if args.type:
@@ -71,7 +78,8 @@ if __name__ == '__main__':
                         print(f"\t{tag}: NO SUCH TAG")
 
 
-            if not (args.type or args.citekey or args.tag or args.hashtags):
+            if not (args.type or args.citekey or args.tag or args.hashtags\
+                    or args.collatehashtags):
                 print(bib)
             print(flush=True) # if &> file - this interleaves stdout and stderr
     
@@ -80,5 +88,5 @@ if __name__ == '__main__':
             sys.exit(e.errno)
     # end loop iterating files
 
-    if args.hashtags:
+    if args.collatehashtags:
         print(f"Collated Hashtags:\n\t{' '.join(all_hashtags)}")
