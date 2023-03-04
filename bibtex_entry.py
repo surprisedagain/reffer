@@ -10,7 +10,7 @@ class FormatError(ValueError): pass
 
 class BibTeXEntry:
     XATTR_KEY = 'sinclair_reffer_bibtex_entry'
-    ENTRY_TEMPLATE = '@article\n@book\n@inbook\n@booklet\n@incollection\n@inproceedings\n@mastersthesis\n@manual\n@misc\n@phdthesis{,\n\tauthor = {},\n\tdoi = {},\n\tedition = {},\n\teditor = {},\n\tjournal = {},\n\tkeywords = {},\n\tnumber = {},\n\tpages = {1--2},\n\tpublisher = {},\n\tschool = {},\n\ttitle = {},\n\turl = {},\n\tvolume = {},\n\tyear = {}\n}'
+    ENTRY_TEMPLATE = '@article \n@book \n@inbook \n@booklet \n@incollection \n@inproceedings \n@mastersthesis \n@manual \n@misc \n@phdthesis{,\n\tauthor = {},\n\tdoi = {},\n\tedition = {},\n\teditor = {},\n\tjournal = {},\n\tkeywords = {},\n\tnumber = {},\n\tpages = {1--2},\n\tpublisher = {},\n\tschool = {},\n\ttitle = {},\n\turl = {},\n\tvolume = {},\n\tyear = {}\n}'
 
     # type string stored in group('type')
     TYPE_RE = re.compile(r'@(?P<type>\w+)\s*\{')

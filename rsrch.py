@@ -28,12 +28,13 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--tag', nargs=2, action='append'
                           , metavar=('TAG','VALUE')
                           , help="search for VALUE in TAG in each BibTeX entry")
-    parser.add_argument('-n', '--note', action='append', metavar=('TERM')
-                                        , help="search for TERM in annotations")
-    parser.add_argument('target', nargs='*', default=['.']
+    parser.add_argument('note', metavar=('REGEX')
+                                       , help="search for REGEX in annotations")
+    parser.add_argument('target', nargs='+'
                           , help="Directory or file whose BibTeX entry and skim"
                                                "annotations are to be searched")
     args = parser.parse_args()
+    args.note_re = re.compile(args.note) if args.note else None
 
     GLOB_PAT = '**/*.pdf' if args.recursive else '*.pdf'
     for filepath in chain.from_iterable(tp_.glob(GLOB_PAT)
@@ -79,7 +80,7 @@ if __name__ == '__main__':
                         result += "".join(tmp_result)
 
             # bibliography search finished - may search notes next
-            if args.note:
+            if args.note_re:
                 notes = subprocess.run(
                          ['skimnotes', 'get', '-format', 'text', filepath , '-']
                          , text=True, capture_output=True
@@ -89,12 +90,11 @@ if __name__ == '__main__':
                                                       , flags=re.MULTILINE)[1:])
                 tmp_result = set()
                 for heading, note in zip(note_iter, note_iter):
-                    if any((st_:= search_term.casefold()) in heading.casefold()
-                                                  or st_ in note.casefold()
-                                                  for search_term in args.note):
-                        tmp_result.add(f"\t{heading}: found \"{st_}\"\n"
-                                                        + TEXT_LAYOUT.fill(note)
-                                                        + "\n\n")
+                    if args.note_re.search(heading + note):
+                        tmp_result.add(f"\t{heading}: found"
+                                                + "\"{args.note_re.pattern}\"\n"
+                                                + TEXT_LAYOUT.fill(note)
+                                                + "\n\n")
                 if tmp_result:
                     result += "".join(tmp_result)
                 elif args.all:
