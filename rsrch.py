@@ -13,7 +13,7 @@ from textwrap import TextWrapper
 
 from bibtex_entry import BibTeXEntry, FormatError
 
-TEXT_LAYOUT = TextWrapper(initial_indent='\t', subsequent_indent='\t'
+TEXT_LAYOUT = TextWrapper(initial_indent='\t ', subsequent_indent='\t'
                                                             , expand_tabs=False)
 if __name__ == '__main__':
     parser = ArgumentParser()
@@ -28,13 +28,13 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--tag', nargs=2, action='append'
                           , metavar=('TAG','VALUE')
                           , help="search for VALUE in TAG in each BibTeX entry")
-    parser.add_argument('note', metavar=('REGEX')
+    parser.add_argument('-n', '--notes', metavar=('REGEX')
                                        , help="search for REGEX in annotations")
     parser.add_argument('target', nargs='+'
                           , help="Directory or file whose BibTeX entry and skim"
                                                "annotations are to be searched")
     args = parser.parse_args()
-    args.note_re = re.compile(args.note) if args.note else None
+    args.note_re = re.compile(args.notes) if args.notes else None
 
     GLOB_PAT = '**/*.pdf' if args.recursive else '*.pdf'
     for filepath in chain.from_iterable(tp_.glob(GLOB_PAT)
@@ -90,11 +90,11 @@ if __name__ == '__main__':
                                                       , flags=re.MULTILINE)[1:])
                 tmp_result = set()
                 for heading, note in zip(note_iter, note_iter):
-                    if args.note_re.search(heading + note):
-                        tmp_result.add(f"\t{heading}: found"
-                                                + "\"{args.note_re.pattern}\"\n"
-                                                + TEXT_LAYOUT.fill(note)
-                                                + "\n\n")
+                    if match := args.note_re.search(heading + note):
+                        tmp_result.add(f"\t{heading}: found "
+                                               + '"' + match.group() + '"\n'
+                                               + TEXT_LAYOUT.fill(note)
+                                               + "\n\n")
                 if tmp_result:
                     result += "".join(tmp_result)
                 elif args.all:
