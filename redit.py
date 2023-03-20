@@ -57,7 +57,7 @@ if __name__ == '__main__':
                     setattr(bib, key, value)
 
             if args.tagappend:
-                for key, suffix in args.tag:
+                for key, suffix in args.tagappend:
                     old_value = getattr(bib, key, '')
                     setattr(bib, key, old_value+suffix)
 
