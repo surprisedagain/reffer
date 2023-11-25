@@ -23,8 +23,6 @@ if __name__ == '__main__':
                             , help="search for conjunction of all search terms")
     parser.add_argument('-ck', '--citekey', metavar=('CITEKEY')
                                                     , help="search for CITEKEY")
-    parser.add_argument('-k', '--keyword', action='append', metavar=('TERM')
-                                      , help="search for TERM in keywords tags")
     parser.add_argument('-t', '--tag', nargs=2, action='append'
                           , metavar=('TAG','VALUE')
                           , help="search for VALUE in TAG in each BibTeX entry")
@@ -45,22 +43,13 @@ if __name__ == '__main__':
                 raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT)
                                                                      , filepath)
             result = ""
-            if args.keyword or args.tag or args.citekey:
+            if args.tag or args.citekey:
                 # need to search some component of bibliography
                 if bib := BibTeXEntry.from_xattr(filepath):
 
                     if args.citekey: # search citekey
                         if args.citekey.casefold() in bib.citekey.casefold():
                             result += f"\tcitekey: {bib.citekey}\n"
-                        elif args.all:
-                            continue # on to next file
-
-                    if args.keyword: # search keywords
-                        junct = all if args.all else any
-                        if junct(search_term.casefold()
-                                      in getattr(bib, 'keywords', '').casefold()
-                                      for search_term in args.keyword):
-                            result += f"\tkeywords = {{{bib.keywords}}}\n"
                         elif args.all:
                             continue # on to next file
 
