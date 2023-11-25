@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # written by nathan sinclair
 
-import os, sys, readline
+import os, sys, readline, errno
 import subprocess, tempfile
 
 from argparse import ArgumentParser
@@ -13,8 +13,6 @@ from bibtex_entry import BibTeXEntry, FormatError
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('-r', '--recursive', action='store_true'
-                                         , help="recurse on each sub-directory")
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-c', '--citekey'
                                , help="set the citekey of the entry to CITEKEY")
@@ -33,13 +31,42 @@ if __name__ == '__main__':
                                 , help="file(s) with BibTeX entry to be edited")
     args = parser.parse_args()
 
-    GLOB_PAT = '**/*.pdf' if args.recursive else '*.pdf'
-    for filepath in chain.from_iterable(tp.glob(GLOB_PAT)
-                                 if (tp := Path(targetname)).is_dir() else (tp,)
-                                 for targetname in args.target):
+    for filepath in (Path(targetname).resolve() for targetname in args.target):
         try:
+            if filepath.is_dir():
+                raise IsADirectoryError(errno.EISDIR, "Is a directory"
+                                                                , str(filepath))
+
             bib = BibTeXEntry.from_xattr(filepath)
-            if bib is None:
+
+            if not (args.citekey or args.autocitekey or args.tag or args.tagedit
+                                                             or args.tagappend):
+                EDITOR = os.environ.get('EDITOR', 'nano')
+                tf = tempfile.NamedTemporaryFile(suffix='.tmp', delete=False)
+                if bib:
+                    tf.write(str(bib).encode())
+                else:
+                    tf.write(BibTeXEntry.ENTRY_TEMPLATE.encode())
+                tf.close()
+                try:
+                    while True: # repeat until no errors raised
+                        try:
+                            subprocess.run([EDITOR, tf.name])
+                            tf = open(tf.name, 'r')
+                            bib = BibTeXEntry.from_str(tf.read())
+                        except FormatError as e:
+                            print('WARNING: Could not recognise entry format: '
+                                 f'Last read char {e.args[0]}', file=sys.stderr)
+                            sleep(4)
+                            continue
+                        else:
+                            break
+                        finally:
+                            tf.close()
+                finally:
+                    os.remove(tf.name)
+
+            elif bib is None:
                 print(f'{filepath}:\n\tNo BibTeX entry attached to file'
                                                               , file=sys.stderr)
                 continue
@@ -74,33 +101,12 @@ if __name__ == '__main__':
                 finally:
                     readline.set_startup_hook()
 
-            if not (args.citekey or args.autocitekey or args.tag or args.tagedit
-                                                             or args.tagappend):
-                EDITOR = os.environ.get('EDITOR', 'nano')
-                tf = tempfile.NamedTemporaryFile(suffix='.tmp', delete=False)
-                tf.write(str(bib).encode())
-                tf.close()
-                try:
-                    while True: # repeat until no errors raised
-                        try:
-                            subprocess.run([EDITOR, tf.name])
-                            tf = open(tf.name, 'r')
-                            bib = BibTeXEntry.from_str(tf.read())
-                        except FormatError as e:
-                            print('WARNING: Could not recognise entry format: '
-                                 f'Last read char {e.args[0]}', file=sys.stderr)
-                            sleep(4)
-                            continue
-                        else:
-                            break
-                        finally:
-                            tf.close()
-                finally:
-                    os.remove(tf.name)
-
             bib.inject(filepath)
             print(f'\tBibTeX entry for "{filepath}" updated')
 
         except FileNotFoundError as e:
+            print(f"ERROR: {e.strerror}: {e.filename}", file=sys.stderr)
+            sys.exit(e.errno)
+        except IsADirectoryError as e:
             print(f"ERROR: {e.strerror}: {e.filename}", file=sys.stderr)
             sys.exit(e.errno)

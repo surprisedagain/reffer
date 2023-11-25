@@ -34,7 +34,7 @@ if __name__ == '__main__':
                           , help="Directory or file whose BibTeX entry and skim"
                                                "annotations are to be searched")
     args = parser.parse_args()
-    args.note_re = re.compile(args.notes) if args.notes else None
+    args.note_re = re.compile(args.notes, flags=re.DOTALL) if args.notes else None
 
     GLOB_PAT = '**/*.pdf' if args.recursive else '*.pdf'
     for filepath in chain.from_iterable(tp_.glob(GLOB_PAT)
@@ -90,9 +90,9 @@ if __name__ == '__main__':
                                                       , flags=re.MULTILINE)[1:])
                 tmp_result = set()
                 for heading, note in zip(note_iter, note_iter):
-                    if match := args.note_re.search(heading + note):
+                    if match := args.note_re.search(note.lstrip()):
                         tmp_result.add(f"\t{heading}: found "
-                                               + '"' + match.group() + '"\n'
+                                               + '"' + match.group().replace('\n',' ') + '"\n'
                                                + TEXT_LAYOUT.fill(note)
                                                + "\n\n")
                 if tmp_result:
